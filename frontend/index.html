@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Valpak · Nuxeo Queue Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
+<style>
+/* ── TOKENS ─────────────────────────────── */
+:root{
+  --bg:#0a0c10;
+  --surface:#111418;
+  --surface2:#181c23;
+  --border:#22272f;
+  --accent:#f5a623;
+  --accent2:#e05c5c;
+  --green:#3ecf8e;
+  --blue:#4f9cf9;
+  --purple:#a78bfa;
+  --text:#e8eaf0;
+  --muted:#606878;
+  --font-head:'Syne',sans-serif;
+  --font-body:'DM Sans',sans-serif;
+  --font-mono:'DM Mono',monospace;
+  --radius:12px;
+  --tab-h:42px;
+}
+
+/* ── RESET ──────────────────────────────── */
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:var(--font-body);font-size:14px;min-height:100vh;overflow-x:hidden}
+a{color:inherit;text-decoration:none}
+button{cursor:pointer;border:none;outline:none;font-family:var(--font-body)}
+input,select{font-family:var(--font-body);color:var(--text)}
+
+/* ── NOISE OVERLAY ──────────────────────── */
+body::before{
+  content:'';position:fixed;inset:0;
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+  pointer-events:none;z-index:0;opacity:.5
+}
+
+/* ── LAYOUT ─────────────────────────────── */
+.shell{position:relative;z-index:1;max-width:1600px;margin:0 auto;padding:0 24px 60px}
+
+/* ── TOP BAR ────────────────────────────── */
+header{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:20px 0 16px;border-bottom:1px solid var(--border);
+  position:sticky;top:0;background:var(--bg);z-index:100;
+}
+.logo{display:flex;align-items:center;gap:12px}
+.logo-badge{
+  background:var(--accent);color:#000;
+  font-family:var(--font-head);font-size:11px;font-weight:800;
+  letter-spacing:.12em;padding:4px 8px;border-radius:6px
+}
+.logo-title{font-family:var(--font-head);font-size:18px;font-weight:700;letter-spacing:-.02em}
+.logo-sub{font-size:11px;color:var(--muted);margin-top:1px}
+
+.header-right{display:flex;align-items:center;gap:16px}
+#live-badge{
+  display:flex;align-items:center;gap:7px;
+  font-size:12px;color:var(--green);font-family:var(--font-mono);
+}
+.pulse{width:8px;height:8px;border-radius:50%;background:var(--green);animation:pulse 1.8s infinite}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.8)}}
+
+.date-picker-wrap{display:flex;align-items:center;gap:8px}
+.date-picker-wrap label{font-size:12px;color:var(--muted)}
+#date-input{
+  background:var(--surface2);border:1px solid var(--border);
+  border-radius:8px;padding:6px 12px;font-size:13px;
+  color:var(--text);cursor:pointer;
+}
+#date-input::-webkit-calendar-picker-indicator{filter:invert(1);opacity:.6;cursor:pointer}
+
+.refresh-btn{
+  background:var(--surface2);border:1px solid var(--border);
+  border-radius:8px;padding:7px 14px;font-size:12px;
+  display:flex;align-items:center;gap:6px;transition:all .2s;
+  color:var(--text);
+}
+.refresh-btn:hover{border-color:var(--accent);color:var(--accent)}
+#next-refresh{font-family:var(--font-mono);font-size:11px;color:var(--muted)}
+
+/* ── TAB NAV ────────────────────────────── */
+.tab-nav{
+  display:flex;gap:4px;margin:20px 0 0;
+  border-bottom:1px solid var(--border);overflow-x:auto;
+  scrollbar-width:none;
+}
+.tab-nav::-webkit-scrollbar{display:none}
+.tab-btn{
+  flex-shrink:0;
+  background:transparent;padding:10px 20px;
+  font-size:13px;font-family:var(--font-body);font-weight:500;
+  color:var(--muted);border-bottom:2px solid transparent;
+  transition:all .2s;position:relative;
+}
+.tab-btn:hover{color:var(--text)}
+.tab-btn.active{color:var(--accent);border-bottom-color:var(--accent)}
+.tab-count{
+  font-family:var(--font-mono);font-size:10px;
+  background:var(--surface2);border-radius:20px;
+  padding:1px 7px;margin-left:6px;
+}
+.tab-btn.active .tab-count{background:rgba(245,166,35,.15);color:var(--accent)}
+
+/* ── METRIC CARDS ───────────────────────── */
+.metrics-grid{
+  display:grid;grid-template-columns:repeat(4,1fr);gap:14px;
+  margin:22px 0 28px;
+}
+@media(max-width:1000px){.metrics-grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:560px) {.metrics-grid{grid-template-columns:1fr}}
+
+.metric-card{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius);padding:20px 22px;
+  cursor:pointer;transition:all .25s;position:relative;overflow:hidden;
+}
+.metric-card::before{
+  content:'';position:absolute;inset:0;opacity:0;
+  background:radial-gradient(circle at 30% 50%,var(--card-color,var(--accent)) 0%,transparent 70%);
+  transition:opacity .3s;
+}
+.metric-card:hover{border-color:var(--card-color,var(--accent));transform:translateY(-2px)}
+.metric-card:hover::before{opacity:.07}
+.metric-card.active-card{border-color:var(--card-color,var(--accent))}
+.metric-card.active-card::before{opacity:.1}
+
+.card-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px}
+.card-value{font-family:var(--font-head);font-size:38px;font-weight:800;line-height:1;color:var(--card-color,var(--accent))}
+.card-sub{font-size:11px;color:var(--muted);margin-top:8px}
+.card-sub span{color:var(--text)}
+.card-icon{position:absolute;right:18px;top:18px;font-size:22px;opacity:.25}
+
+/* ── TABLE SECTION ──────────────────────── */
+.table-section{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius);overflow:hidden;
+}
+.table-header{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:16px 20px;border-bottom:1px solid var(--border);
+}
+.table-title{font-family:var(--font-head);font-size:14px;font-weight:700}
+.table-meta{font-size:12px;color:var(--muted);font-family:var(--font-mono)}
+
+.filter-row{
+  display:flex;align-items:center;gap:10px;
+  padding:12px 20px;border-bottom:1px solid var(--border);
+  flex-wrap:wrap;
+}
+.cat-btn{
+  background:var(--surface2);border:1px solid var(--border);
+  border-radius:6px;padding:5px 14px;font-size:12px;
+  color:var(--muted);transition:all .2s;
+}
+.cat-btn:hover{color:var(--text);border-color:var(--border)}
+.cat-btn.active{color:#000;border-color:transparent}
+.cat-btn[data-cat="incoming"].active{background:var(--green)}
+.cat-btn[data-cat="outgoing"].active{background:var(--blue)}
+.cat-btn[data-cat="overdue"].active{background:var(--accent2)}
+.cat-btn[data-cat="pending"].active{background:var(--purple)}
+
+#search-input{
+  margin-left:auto;background:var(--surface2);border:1px solid var(--border);
+  border-radius:6px;padding:5px 12px;font-size:12px;color:var(--text);
+  width:200px;transition:border .2s;
+}
+#search-input:focus{border-color:var(--accent);outline:none}
+
+.table-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+thead th{
+  background:var(--surface2);padding:10px 14px;
+  text-align:left;font-size:10px;font-weight:600;
+  color:var(--muted);text-transform:uppercase;letter-spacing:.07em;
+  white-space:nowrap;position:sticky;top:0;
+}
+tbody tr{border-bottom:1px solid var(--border);transition:background .15s}
+tbody tr:hover{background:var(--surface2)}
+tbody tr:last-child{border-bottom:none}
+td{padding:10px 14px;vertical-align:middle;white-space:nowrap}
+td.ad-id{font-family:var(--font-mono);font-size:11px;color:var(--blue)}
+td.advertiser{max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+.badge{
+  display:inline-flex;align-items:center;gap:4px;
+  border-radius:4px;padding:2px 8px;font-size:10px;font-weight:600;
+}
+.badge-red{background:rgba(224,92,92,.15);color:var(--accent2)}
+.badge-green{background:rgba(62,207,142,.12);color:var(--green)}
+.badge-blue{background:rgba(79,156,249,.12);color:var(--blue)}
+.badge-muted{background:var(--surface2);color:var(--muted)}
+
+.overdue-cell{color:var(--accent2);font-weight:600}
+
+.empty-state{
+  text-align:center;padding:60px 20px;
+  color:var(--muted);font-size:13px;
+}
+.empty-state .icon{font-size:36px;margin-bottom:12px;opacity:.4}
+
+/* ── SKELETON LOADER ────────────────────── */
+.skeleton{
+  background:linear-gradient(90deg,var(--surface2) 25%,var(--border) 50%,var(--surface2) 75%);
+  background-size:200% 100%;animation:shimmer 1.4s infinite;
+  border-radius:6px;
+}
+@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+
+/* ── TOAST ──────────────────────────────── */
+#toast{
+  position:fixed;bottom:24px;right:24px;
+  background:var(--surface2);border:1px solid var(--border);
+  border-radius:10px;padding:12px 20px;font-size:13px;
+  transform:translateY(80px);opacity:0;transition:all .3s;
+  z-index:9999;
+}
+#toast.show{transform:translateY(0);opacity:1}
+
+/* ── SCROLLBAR ──────────────────────────── */
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:var(--surface)}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+</style>
+</head>
+<body>
+<div class="shell">
+
+<!-- HEADER -->
+<header>
+  <div class="logo">
+    <div class="logo-badge">VALPAK</div>
+    <div>
+      <div class="logo-title">Nuxeo Queue Dashboard</div>
+      <div class="logo-sub">Live ad tracking across all workflow stages</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <div id="live-badge"><span class="pulse"></span><span id="last-updated">Connecting…</span></div>
+    <div class="date-picker-wrap">
+      <label>Date</label>
+      <input type="date" id="date-input"/>
+    </div>
+    <button class="refresh-btn" onclick="fetchAll()">⟳ Refresh &nbsp;<span id="next-refresh"></span></button>
+  </div>
+</header>
+
+<!-- TAB NAV -->
+<nav class="tab-nav" id="tab-nav"></nav>
+
+<!-- METRIC CARDS -->
+<div class="metrics-grid" id="metrics-grid">
+  <!-- injected by JS -->
+</div>
+
+<!-- TABLE -->
+<div class="table-section">
+  <div class="table-header">
+    <span class="table-title" id="table-title">Ad Details</span>
+    <span class="table-meta" id="table-meta"></span>
+  </div>
+  <div class="filter-row">
+    <button class="cat-btn active" data-cat="incoming" onclick="setCategory('incoming')">▲ Incoming</button>
+    <button class="cat-btn" data-cat="outgoing"  onclick="setCategory('outgoing')">▼ Outgoing</button>
+    <button class="cat-btn" data-cat="overdue"   onclick="setCategory('overdue')">⚠ Overdue</button>
+    <button class="cat-btn" data-cat="pending"   onclick="setCategory('pending')">⏳ Pending</button>
+    <input type="text" id="search-input" placeholder="Search Ad ID / Advertiser…" oninput="renderTable()"/>
+  </div>
+  <div class="table-wrap">
+    <table id="main-table">
+      <thead>
+        <tr>
+          <th>Ad ID</th>
+          <th>Advertiser</th>
+          <th>Due Out Deadline</th>
+          <th>Art Deadline</th>
+          <th>DT</th>
+          <th>Material</th>
+          <th>Complexity</th>
+          <th>Effort</th>
+          <th>Claimed By</th>
+          <th>Sales Rep</th>
+          <th>Market</th>
+          <th>Collections</th>
+          <th>Due Out</th>
+          <th>Art</th>
+          <th>Snapshot</th>
+        </tr>
+      </thead>
+      <tbody id="table-body">
+        <tr><td colspan="15"><div class="empty-state"><div class="icon">📋</div>Select a metric card to view details</div></td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+</div><!-- /shell -->
+<div id="toast"></div>
+
+<script>
+// ── CONFIG ──────────────────────────────────────
+// Change this to your deployed backend URL
+const API = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+  ? 'http://localhost:8000'
+  : '';   // same-origin when deployed
+
+const TABS = [
+  "Material Review",
+  "PreMedia",
+  "Design",
+  "In Progress Ads",
+  "In House Change",
+  "Quality Control",
+];
+
+const CARD_COLORS = {
+  incoming:         '#3ecf8e',
+  outgoing:         '#4f9cf9',
+  overdue_due_out:  '#e05c5c',
+  overdue_art:      '#f5a623',
+  pending:          '#a78bfa',
+};
+
+// ── STATE ────────────────────────────────────────
+let currentTab      = TABS[0];
+let currentCategory = 'incoming';
+let summaryData     = {};
+let adsData         = [];
+let countdown       = 300;
+let countdownTimer  = null;
+
+// ── INIT ─────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', () => {
+  // Set default date to today
+  const today = new Date().toISOString().slice(0,10);
+  document.getElementById('date-input').value = today;
+  document.getElementById('date-input').addEventListener('change', fetchAll);
+
+  buildTabNav();
+  fetchAll();
+  startCountdown();
+});
+
+// ── TAB NAV ──────────────────────────────────────
+function buildTabNav(){
+  const nav = document.getElementById('tab-nav');
+  nav.innerHTML = '';
+  TABS.forEach(tab => {
+    const btn = document.createElement('button');
+    btn.className = 'tab-btn' + (tab === currentTab ? ' active' : '');
+    btn.dataset.tab = tab;
+    btn.innerHTML = `${tab} <span class="tab-count" id="tc-${slug(tab)}">—</span>`;
+    btn.onclick = () => switchTab(tab);
+    nav.appendChild(btn);
+  });
+}
+
+function switchTab(tab){
+  currentTab = tab;
+  document.querySelectorAll('.tab-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.tab === tab);
+  });
+  renderMetrics();
+  fetchAds();
+}
+
+// ── FETCH SUMMARY ─────────────────────────────────
+async function fetchAll(){
+  const d = document.getElementById('date-input').value;
+  try {
+    const res  = await fetch(`${API}/api/summary?date_str=${d}`);
+    const data = await res.json();
+    summaryData = data.tabs || {};
+    renderMetrics();
+    updateTabCounts();
+
+    const lu = await fetch(`${API}/api/last_updated`);
+    const luData = await lu.json();
+    document.getElementById('last-updated').textContent =
+      luData.last_updated ? `Last sync: ${luData.last_updated}` : 'No data yet';
+  } catch(e){
+    showToast('⚠ Could not reach backend. Is the server running?');
+  }
+  fetchAds();
+}
+
+function updateTabCounts(){
+  TABS.forEach(tab => {
+    const el = document.getElementById('tc-' + slug(tab));
+    if(!el) return;
+    const d = summaryData[tab];
+    el.textContent = d ? d.incoming : '—';
+  });
+}
+
+// ── METRICS ──────────────────────────────────────
+function renderMetrics(){
+  const d = summaryData[currentTab] || {};
+  const grid = document.getElementById('metrics-grid');
+  grid.innerHTML = '';
+
+  const cards = [
+    {
+      key:'incoming', label:'Incoming Ads Today', value: d.incoming ?? 0,
+      icon:'📥', color: CARD_COLORS.incoming,
+      sub: `First-time appearances today`
+    },
+    {
+      key:'outgoing', label:'Moved Out Today', value: d.outgoing ?? 0,
+      icon:'📤', color: CARD_COLORS.outgoing,
+      sub: `Proofed out / advanced`
+    },
+    {
+      key:'overdue', label:'Overdue Ads', value: (d.overdue_due_out ?? 0) + (d.overdue_art ?? 0),
+      icon:'🔴', color: CARD_COLORS.overdue_due_out,
+      sub: `Due Out: <span>${d.overdue_due_out ?? 0}</span> &nbsp;|&nbsp; Art: <span>${d.overdue_art ?? 0}</span>`
+    },
+    {
+      key:'pending', label:'Pending (End of Day)', value: d.pending ?? 0,
+      icon:'⏳', color: CARD_COLORS.pending,
+      sub: `Due Red: <span>${d.pending_due_red ?? 0}</span> &nbsp;|&nbsp; Art Red: <span>${d.pending_art_red ?? 0}</span>`
+    },
+  ];
+
+  cards.forEach(c => {
+    const div = document.createElement('div');
+    div.className = 'metric-card' + (currentCategory === c.key ? ' active-card' : '');
+    div.style.setProperty('--card-color', c.color);
+    div.innerHTML = `
+      <div class="card-icon">${c.icon}</div>
+      <div class="card-label">${c.label}</div>
+      <div class="card-value">${c.value}</div>
+      <div class="card-sub">${c.sub}</div>
+    `;
+    div.onclick = () => setCategory(c.key);
+    grid.appendChild(div);
+  });
+}
+
+// ── ADS TABLE ────────────────────────────────────
+function setCategory(cat){
+  currentCategory = cat;
+  document.querySelectorAll('.cat-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.cat === cat);
+  });
+  renderMetrics();  // re-highlight active card
+  fetchAds();
+}
+
+async function fetchAds(){
+  const d   = document.getElementById('date-input').value;
+  const cat = currentCategory === 'overdue' ? 'overdue' : currentCategory;
+
+  try {
+    const res  = await fetch(`${API}/api/ads?tab=${encodeURIComponent(currentTab)}&category=${cat}&date_str=${d}`);
+    const data = await res.json();
+    adsData = data.ads || [];
+    document.getElementById('table-title').textContent = `${currentTab} — ${capitalize(currentCategory)}`;
+    document.getElementById('table-meta').textContent  = `${adsData.length} ads`;
+    renderTable();
+  } catch(e){
+    adsData = [];
+    renderTable();
+  }
+}
+
+function renderTable(){
+  const q    = document.getElementById('search-input').value.toLowerCase();
+  const body = document.getElementById('table-body');
+
+  const filtered = adsData.filter(r =>
+    !q ||
+    (r.ad_id       || '').toLowerCase().includes(q) ||
+    (r.advertiser  || '').toLowerCase().includes(q) ||
+    (r.claimed_by  || '').toLowerCase().includes(q) ||
+    (r.market      || '').toLowerCase().includes(q)
+  );
+
+  if(!filtered.length){
+    body.innerHTML = `<tr><td colspan="15"><div class="empty-state"><div class="icon">🔍</div>${q ? 'No matching ads found' : 'No data for this selection'}</div></td></tr>`;
+    document.getElementById('table-meta').textContent = '0 ads';
+    return;
+  }
+
+  document.getElementById('table-meta').textContent = `${filtered.length} ads`;
+  body.innerHTML = filtered.map(r => `
+    <tr>
+      <td class="ad-id">${r.ad_id || '—'}</td>
+      <td class="advertiser" title="${r.advertiser || ''}">${r.advertiser || '—'}</td>
+      <td class="${r.due_out_is_red ? 'overdue-cell' : ''}">${fmt(r.due_out_deadline)}</td>
+      <td class="${r.art_is_red    ? 'overdue-cell' : ''}">${fmt(r.art_deadline)}</td>
+      <td>${r.dt || '—'}</td>
+      <td>${r.material || '—'}</td>
+      <td>${r.complexity || '—'}</td>
+      <td>${r.effort || '—'}</td>
+      <td>${r.claimed_by || '—'}</td>
+      <td>${r.sales_rep || '—'}</td>
+      <td>${r.market || '—'}</td>
+      <td>${r.collections || '—'}</td>
+      <td>${r.due_out_is_red ? '<span class="badge badge-red">⚠ Late</span>' : '<span class="badge badge-green">OK</span>'}</td>
+      <td>${r.art_is_red    ? '<span class="badge badge-red">⚠ Late</span>' : '<span class="badge badge-green">OK</span>'}</td>
+      <td class="muted" style="color:var(--muted);font-family:var(--font-mono);font-size:11px">${r.snapshot_time ? r.snapshot_time.slice(11,16) : '—'}</td>
+    </tr>
+  `).join('');
+}
+
+// ── AUTO-REFRESH COUNTDOWN ────────────────────────
+function startCountdown(){
+  countdown = 300;
+  if(countdownTimer) clearInterval(countdownTimer);
+  countdownTimer = setInterval(() => {
+    countdown--;
+    const m = String(Math.floor(countdown/60)).padStart(2,'0');
+    const s = String(countdown % 60).padStart(2,'0');
+    document.getElementById('next-refresh').textContent = `${m}:${s}`;
+    if(countdown <= 0){
+      fetchAll();
+      countdown = 300;
+    }
+  }, 1000);
+}
+
+// ── UTILS ─────────────────────────────────────────
+function slug(s){ return s.toLowerCase().replace(/\s+/g,'-').replace(/[^a-z0-9-]/g,'') }
+function capitalize(s){ return s.charAt(0).toUpperCase() + s.slice(1) }
+function fmt(v){ return v && v !== 'None' ? v : '—' }
+
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3500);
+}
+</script>
+</body>
+</html>
